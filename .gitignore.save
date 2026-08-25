@@ -1,0 +1,28 @@
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+build/
+cmake-cache/
+*.dSYM/
+# macOS
+.DS_Store
+
+# ns-3 build files
+build/
+cmake-cache/
+
+# Generated simulation results
+*.xml
+*.csv
+
+# Compiled binaries
+*.o
+*.dylib
+*.a
+*.so
+
+# IDE files
+.vscode/
+.idea/
