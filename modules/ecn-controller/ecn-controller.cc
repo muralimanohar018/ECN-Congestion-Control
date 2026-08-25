@@ -1,17 +1,16 @@
 #include "ecn-controller.h"
-
 #include "../bdp-monitor/bdp-monitor.h"
 #include "../bdp-controller/bdp-controller.h"
 #include "../ecn-monitor/ecn-monitor.h"
-
 #include "ns3/core-module.h"
 #include "ns3/tcp-socket-state.h"
-
 #include <iomanip>
 #include <iostream>
-//tcb->m_segmentSize is the TCP segment size that ns-3 is currently using for that TCP connection.
+
 using namespace ns3;
-using namespace std;
+
+namespace ns3
+{
 namespace ecn
 {
 
@@ -24,11 +23,7 @@ uint32_t EcnController::g_controllerUpdates = 0;
 
 TypeId EcnController::GetTypeId()
 {
-    static TypeId tid = TypeId("ns3::EcnController")
-        .SetParent<TcpNewReno>()
-        .SetGroupName("Internet")
-        .AddConstructor<EcnController>();
-
+    static TypeId tid = TypeId("ns3::EcnController").SetParent<TcpNewReno>().SetGroupName("Internet").AddConstructor<EcnController>();
     return tid;
 }
 
@@ -90,10 +85,7 @@ uint32_t EcnController::GetControllerUpdates()
 void EcnController::PktsAcked(Ptr<TcpSocketState> tcb, uint32_t segmentsAcked, const Time& rtt)
 {
     TcpNewReno::PktsAcked(tcb, segmentsAcked, rtt);
-
-    if (rtt.IsZero())
-        return;
-
+    if (rtt.IsZero()) return;
     BdpMonitor::Update(rtt.GetSeconds(), tcb->m_segmentSize, g_bottleneckBps);
 }
 
@@ -108,7 +100,6 @@ uint32_t EcnController::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t byte
     g_lastOldCwnd = oldCwnd;
 
     double ecnRatio = EcnMonitor::GetRatio();
-
     double reductionFactor = 1.0 - (g_alpha * ecnRatio);
 
     if (reductionFactor < 0.0)
@@ -123,24 +114,28 @@ uint32_t EcnController::GetSsThresh(Ptr<const TcpSocketState> tcb, uint32_t byte
 
     uint32_t finalCwnd = BdpController::Apply(formulaCwnd, tcb->m_segmentSize);
 
+    if (finalCwnd < tcb->m_segmentSize)
+        finalCwnd = tcb->m_segmentSize;
+
     g_lastFinalCwnd = finalCwnd;
     ++g_controllerUpdates;
 
-   cout << "\n"
+    std::cout << "\n"
               << "==================================================\n"
               << "             ECN + BDP CONTROLLER\n"
               << "==================================================\n"
               << "Controller Update : " << g_controllerUpdates << "\n"
-              << "Time              : " << Simulator::Now().GetSeconds() << " s\n"
+              << "Time              : " << std::fixed << std::setprecision(8) << Simulator::Now().GetSeconds() << " s\n"
               << "ECN ACK Count     : " << EcnMonitor::GetEcnAckCount() << "\n"
               << "Total Packets     : " << EcnMonitor::GetTotalPackets() << "\n"
               << "ECN Marked        : " << EcnMonitor::GetMarkedPackets() << "\n"
-              << "ECN Ratio         : " << std::fixed << std::setprecision(8) << ecnRatio << "\n"
+              << "ECN Ratio         : " << ecnRatio << "\n"
               << "Alpha             : " << g_alpha << "\n"
               << "RTT               : " << BdpMonitor::GetRttSeconds() << " s\n"
               << "BDP               : " << BdpMonitor::GetBdpBytes() << " bytes\n"
               << "BDP               : " << BdpMonitor::GetBdpPackets() << " packets\n"
               << "Old CWND          : " << oldCwnd << " bytes\n"
+              << "Bytes In Flight   : " << bytesInFlight << " bytes\n"
               << "Formula CWND      : " << formulaCwnd << " bytes\n"
               << "Final CWND        : " << finalCwnd << " bytes\n"
               << "==================================================\n";
@@ -158,14 +153,13 @@ void EcnController::CwndEvent(Ptr<TcpSocketState> tcb, const TcpSocketState::Tcp
     TcpNewReno::CwndEvent(tcb, event);
 
     if (event == TcpSocketState::CA_EVENT_ECN_IS_CE)
-        cout << "[TCP CE] time=" << Simulator::Now().GetSeconds() << " s\n";
+        std::cout << "[TCP CE] time=" << std::fixed << std::setprecision(8) << Simulator::Now().GetSeconds() << " s\n";
 
     if (event == TcpSocketState::CA_EVENT_COMPLETE_CWR)
-        cout << "[TCP CWR] time=" << Simulator::Now().GetSeconds() << " s\n";
+        std::cout << "[TCP CWR] time=" << std::fixed << std::setprecision(8) << Simulator::Now().GetSeconds() << " s\n";
 }
 
 NS_OBJECT_ENSURE_REGISTERED(EcnController);
 
 }
-
-
+}

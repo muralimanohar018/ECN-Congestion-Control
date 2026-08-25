@@ -1,6 +1,6 @@
 set(ECN_FINAL_SOURCES
-
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/traffic-generator/traffic-generator.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules/vbr-generator/vbr-generator.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/ecn-monitor/ecn-monitor.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/ecn-controller/ecn-controller.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/bdp-monitor/bdp-monitor.cc
@@ -10,6 +10,7 @@ set(ECN_FINAL_SOURCES
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/traffic-generator
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules/vbr-generator
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/ecn-monitor
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/ecn-controller
     ${CMAKE_CURRENT_SOURCE_DIR}/modules/bdp-monitor

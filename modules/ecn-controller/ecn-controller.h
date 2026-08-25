@@ -2,35 +2,27 @@
 #define ECN_CONTROLLER_H
 
 #include "ns3/tcp-congestion-ops.h"
+#include "ns3/tcp-socket-base.h"
 
-#include <cstdint>
-
+namespace ns3
+{
 namespace ecn
 {
 
-class EcnController : public ns3::TcpNewReno
+class EcnController : public TcpNewReno
 {
-  public:
-    static ns3::TypeId GetTypeId();
+public:
+    static TypeId GetTypeId();
 
     EcnController();
     EcnController(const EcnController& other);
     ~EcnController() override;
 
     std::string GetName() const override;
-    ns3::Ptr<ns3::TcpCongestionOps> Fork() override;
-
-    void PktsAcked(ns3::Ptr<ns3::TcpSocketState> tcb, uint32_t segmentsAcked,const ns3::Time& rtt) override;
-
-    uint32_t GetSsThresh(ns3::Ptr<const ns3::TcpSocketState> tcb,uint32_t bytesInFlight) override;
-
-    void IncreaseWindow(ns3::Ptr<ns3::TcpSocketState> tcb, uint32_t segmentsAcked) override;
-
-    void CwndEvent(ns3::Ptr<ns3::TcpSocketState> tcb, const ns3::TcpSocketState::TcpCAEvent_t event) override;
+    Ptr<TcpCongestionOps> Fork() override;
 
     static void SetAlpha(double alpha);
     static double GetAlpha();
-
     static void SetBottleneckBps(uint64_t bps);
 
     static uint32_t GetLastOldCwnd();
@@ -38,7 +30,12 @@ class EcnController : public ns3::TcpNewReno
     static uint32_t GetLastFinalCwnd();
     static uint32_t GetControllerUpdates();
 
-  private:
+    void PktsAcked(Ptr<TcpSocketState> tcb,uint32_t segmentsAcked,const Time& rtt) override;
+    uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb,uint32_t bytesInFlight) override;
+    void IncreaseWindow(Ptr<TcpSocketState> tcb,uint32_t segmentsAcked) override;
+    void CwndEvent(Ptr<TcpSocketState> tcb,const TcpSocketState::TcpCAEvent_t event) override;
+
+private:
     static double g_alpha;
     static uint64_t g_bottleneckBps;
     static uint32_t g_lastOldCwnd;
@@ -48,5 +45,6 @@ class EcnController : public ns3::TcpNewReno
 };
 
 } // namespace ecn
+} // namespace ns3
 
-#endif
+#endif // ECN_CONTROLLER_H
