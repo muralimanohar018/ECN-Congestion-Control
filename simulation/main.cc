@@ -25,127 +25,321 @@ using namespace ecn;
 
 namespace
 {
-constexpr uint64_t BOTTLENECK_BPS=5000000;
-constexpr uint32_t DEFAULT_PACKET_SIZE=1000;
-constexpr double DEFAULT_SIMULATION_TIME=30.0;
-constexpr double DEFAULT_MIN_TH=1.0;
-constexpr double DEFAULT_MAX_TH=3.0;
-constexpr uint32_t DEFAULT_QUEUE_PACKETS=100;
+constexpr uint64_t BOTTLENECK_BPS = 5000000;
+constexpr uint32_t DEFAULT_PACKET_SIZE = 1000;
+constexpr double DEFAULT_SIMULATION_TIME = 30.0;
+constexpr double DEFAULT_MIN_TH = 1.0;
+constexpr double DEFAULT_MAX_TH = 3.0;
+constexpr uint32_t DEFAULT_QUEUE_PACKETS = 100;
 }
 
-int main(int argc,char* argv[])
+int main(int argc, char* argv[])
 {
-    uint64_t packetCount=100000;
-    uint32_t packetSize=DEFAULT_PACKET_SIZE;
-    double simulationTime=DEFAULT_SIMULATION_TIME;
-    double alpha=1.0;
-    double minTh=DEFAULT_MIN_TH;
-    double maxTh=DEFAULT_MAX_TH;
-    uint32_t queuePackets=DEFAULT_QUEUE_PACKETS;
+    uint64_t packetCount = 100000;
+    uint32_t packetSize = DEFAULT_PACKET_SIZE;
+    double simulationTime = DEFAULT_SIMULATION_TIME;
+    double alpha = 1.0;
+    double minTh = DEFAULT_MIN_TH;
+    double maxTh = DEFAULT_MAX_TH;
+    uint32_t queuePackets = DEFAULT_QUEUE_PACKETS;
 
     CommandLine cmd(__FILE__);
-    cmd.AddValue("packetCount","Number of application packets",packetCount);
-    cmd.AddValue("packetSize","Application packet size",packetSize);
-    cmd.AddValue("simulationTime","Simulation duration",simulationTime);
-    cmd.AddValue("alpha","ECN controller alpha",alpha);
-    cmd.AddValue("minTh","RED minimum threshold in packets",minTh);
-    cmd.AddValue("maxTh","RED maximum threshold in packets",maxTh);
-    cmd.AddValue("queuePackets","RED queue size in packets",queuePackets);
-    cmd.Parse(argc,argv);
 
+    cmd.AddValue("packetCount",
+                 "Number of application packets",
+                 packetCount);
+
+    cmd.AddValue("packetSize",
+                 "Application packet size",
+                 packetSize);
+
+    cmd.AddValue("simulationTime",
+                 "Simulation duration",
+                 simulationTime);
+
+    cmd.AddValue("alpha",
+                 "ECN controller alpha",
+                 alpha);
+
+    cmd.AddValue("minTh",
+                 "RED minimum threshold in packets",
+                 minTh);
+
+    cmd.AddValue("maxTh",
+                 "RED maximum threshold in packets",
+                 maxTh);
+
+    cmd.AddValue("queuePackets",
+                 "RED queue size in packets",
+                 queuePackets);
+
+    cmd.Parse(argc, argv);
+
+    // Reset monitors before starting the simulation.
     EcnMonitor::Reset();
     BdpMonitor::Reset();
+
     EcnController::SetAlpha(alpha);
     EcnController::SetBottleneckBps(BOTTLENECK_BPS);
 
-    const uint64_t totalBytes=packetCount*static_cast<uint64_t>(packetSize);
+    const uint64_t totalBytes =
+        packetCount * static_cast<uint64_t>(packetSize);
 
-    Config::SetDefault("ns3::TcpL4Protocol::SocketType",TypeIdValue(EcnController::GetTypeId()));
-    Config::SetDefault("ns3::TcpSocketBase::UseEcn",EnumValue(TcpSocketState::On));
+    // Use the custom ECN controller as the TCP congestion-control algorithm.
+    Config::SetDefault(
+        "ns3::TcpL4Protocol::SocketType",
+        TypeIdValue(EcnController::GetTypeId()));
+
+    Config::SetDefault(
+        "ns3::TcpSocketBase::UseEcn",
+        EnumValue(TcpSocketState::On));
+
+    // ============================================================
+    // TOPOLOGY
+    // ============================================================
 
     NodeContainer nodes;
     nodes.Create(4);
 
-    Ptr<Node> sender=nodes.Get(0);
-    Ptr<Node> vbrSender=nodes.Get(1);
-    Ptr<Node> router=nodes.Get(2);
-    Ptr<Node> receiver=nodes.Get(3);
+    Ptr<Node> sender = nodes.Get(0);
+    Ptr<Node> vbrSender = nodes.Get(1);
+    Ptr<Node> router = nodes.Get(2);
+    Ptr<Node> receiver = nodes.Get(3);
 
+    // TCP Sender -> Router
     PointToPointHelper senderRouter;
-    senderRouter.SetDeviceAttribute("DataRate",StringValue("1Gbps"));
-    senderRouter.SetChannelAttribute("Delay",StringValue("5ms"));
-    NetDeviceContainer senderRouterDevices=senderRouter.Install(sender,router);
 
+    senderRouter.SetDeviceAttribute(
+        "DataRate",
+        StringValue("1Gbps"));
+
+    senderRouter.SetChannelAttribute(
+        "Delay",
+        StringValue("5ms"));
+
+    NetDeviceContainer senderRouterDevices =
+        senderRouter.Install(sender, router);
+
+    // VBR Sender -> Router
     PointToPointHelper vbrRouter;
-    vbrRouter.SetDeviceAttribute("DataRate",StringValue("100Mbps"));
-    vbrRouter.SetChannelAttribute("Delay",StringValue("5ms"));
-    NetDeviceContainer vbrRouterDevices=vbrRouter.Install(vbrSender,router);
 
+    vbrRouter.SetDeviceAttribute(
+        "DataRate",
+        StringValue("100Mbps"));
+
+    vbrRouter.SetChannelAttribute(
+        "Delay",
+        StringValue("5ms"));
+
+    NetDeviceContainer vbrRouterDevices =
+        vbrRouter.Install(vbrSender, router);
+
+    // Router -> Receiver
     PointToPointHelper routerReceiver;
-    routerReceiver.SetDeviceAttribute("DataRate",StringValue("5Mbps"));
-    routerReceiver.SetChannelAttribute("Delay",StringValue("50ms"));
-    NetDeviceContainer routerReceiverDevices=routerReceiver.Install(router,receiver);
+
+    routerReceiver.SetDeviceAttribute(
+        "DataRate",
+        StringValue("5Mbps"));
+
+    routerReceiver.SetChannelAttribute(
+        "Delay",
+        StringValue("50ms"));
+
+    NetDeviceContainer routerReceiverDevices =
+        routerReceiver.Install(router, receiver);
+
+    // ============================================================
+    // INTERNET STACK
+    // ============================================================
 
     InternetStackHelper internet;
     internet.Install(nodes);
 
     MobilityHelper mobility;
-    mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+
+    mobility.SetMobilityModel(
+        "ns3::ConstantPositionMobilityModel");
+
     mobility.Install(nodes);
+
+    // ============================================================
+    // IP ADDRESSING
+    // ============================================================
 
     Ipv4AddressHelper address;
 
-    address.SetBase("10.0.1.0","255.255.255.0");
-    Ipv4InterfaceContainer senderRouterInterfaces=address.Assign(senderRouterDevices);
+    address.SetBase(
+        "10.0.1.0",
+        "255.255.255.0");
 
-    address.SetBase("10.0.2.0","255.255.255.0");
-    Ipv4InterfaceContainer vbrRouterInterfaces=address.Assign(vbrRouterDevices);
+    Ipv4InterfaceContainer senderRouterInterfaces =
+        address.Assign(senderRouterDevices);
 
-    address.SetBase("10.0.3.0","255.255.255.0");
-    Ipv4InterfaceContainer routerReceiverInterfaces=address.Assign(routerReceiverDevices);
+    address.SetBase(
+        "10.0.2.0",
+        "255.255.255.0");
+
+    Ipv4InterfaceContainer vbrRouterInterfaces =
+        address.Assign(vbrRouterDevices);
+
+    address.SetBase(
+        "10.0.3.0",
+        "255.255.255.0");
+
+    Ipv4InterfaceContainer routerReceiverInterfaces =
+        address.Assign(routerReceiverDevices);
 
     (void)senderRouterInterfaces;
     (void)vbrRouterInterfaces;
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
+    // ============================================================
+    // RED + ECN
+    // ============================================================
+
     TrafficControlHelper trafficControl;
-    trafficControl.Uninstall(routerReceiverDevices.Get(0));
 
-    trafficControl.SetRootQueueDisc("ns3::RedQueueDisc","MinTh",DoubleValue(minTh),"MaxTh",DoubleValue(maxTh),"MaxSize",QueueSizeValue(QueueSize(std::to_string(queuePackets)+"p")),"UseEcn",BooleanValue(true));
+    trafficControl.Uninstall(
+        routerReceiverDevices.Get(0));
 
-    QueueDiscContainer queueDiscs=trafficControl.Install(routerReceiverDevices.Get(0));
-    Ptr<QueueDisc> redQueue=queueDiscs.Get(0);
+    trafficControl.SetRootQueueDisc(
+        "ns3::RedQueueDisc",
+        "MinTh",
+        DoubleValue(minTh),
+        "MaxTh",
+        DoubleValue(maxTh),
+        "MaxSize",
+        QueueSizeValue(
+            QueueSize(
+                std::to_string(queuePackets) + "p")),
+        "UseEcn",
+        BooleanValue(true));
 
-    const bool enqueueConnected=redQueue->TraceConnectWithoutContext("Enqueue",MakeCallback(&EcnMonitor::OnEnqueue));
-    const bool markConnected=redQueue->TraceConnectWithoutContext("Mark",MakeCallback(&EcnMonitor::OnMark));
+    QueueDiscContainer queueDiscs =
+        trafficControl.Install(
+            routerReceiverDevices.Get(0));
 
-    std::cout << "[V2] Queue Enqueue Trace: " << (enqueueConnected ? "CONNECTED" : "FAILED") << "\n";
-    std::cout << "[V2] Queue Mark Trace: " << (markConnected ? "CONNECTED" : "FAILED") << "\n";
+    Ptr<QueueDisc> redQueue = queueDiscs.Get(0);
 
-    const uint16_t port=5000;
+    const bool enqueueConnected =
+        redQueue->TraceConnectWithoutContext(
+            "Enqueue",
+            MakeCallback(&EcnMonitor::OnEnqueue));
 
-    TrafficGenerator::InstallReceiver(receiver,port,simulationTime);
+    const bool markConnected =
+        redQueue->TraceConnectWithoutContext(
+            "Mark",
+            MakeCallback(&EcnMonitor::OnMark));
 
-    Address tcpSinkAddress(InetSocketAddress(routerReceiverInterfaces.GetAddress(1),port));
-    TrafficGenerator::InstallSender(sender,tcpSinkAddress,port,totalBytes,packetSize,1.0,simulationTime);
+    std::cout
+        << "[V2] Queue Enqueue Trace: "
+        << (enqueueConnected ? "CONNECTED" : "FAILED")
+        << "\n";
 
-    Address vbrReceiverAddress(InetSocketAddress(routerReceiverInterfaces.GetAddress(1),port));
-    VbrGenerator::Install(vbrSender,vbrReceiverAddress);
+    std::cout
+        << "[V2] Queue Mark Trace: "
+        << (markConnected ? "CONNECTED" : "FAILED")
+        << "\n";
+
+    // ============================================================
+    // APPLICATIONS
+    // ============================================================
+
+    const uint16_t port = 5000;
+
+    // TCP receiver
+    TrafficGenerator::InstallReceiver(
+        receiver,
+        port,
+        simulationTime);
+
+    // UDP/VBR receiver
+    TrafficGenerator::InstallUdpReceiver(
+        receiver,
+        port,
+        0.0,
+        simulationTime);
+
+    // TCP sender
+    Address tcpSinkAddress(
+        InetSocketAddress(
+            routerReceiverInterfaces.GetAddress(1),
+            port));
+
+    TrafficGenerator::InstallSender(
+        sender,
+        tcpSinkAddress,
+        port,
+        totalBytes,
+        packetSize,
+        1.0,
+        simulationTime);
+
+    // VBR sender
+    Address vbrReceiverAddress(
+        InetSocketAddress(
+            routerReceiverInterfaces.GetAddress(1),
+            port));
+
+    VbrGenerator::Install(
+        vbrSender,
+        vbrReceiverAddress);
+
+    // ============================================================
+    // NETANIM
+    // ============================================================
 
     AnimationInterface anim("ecn-v2.xml");
-    anim.SetConstantPosition(sender,10.0,40.0);
-    anim.SetConstantPosition(vbrSender,10.0,20.0);
-    anim.SetConstantPosition(router,50.0,30.0);
-    anim.SetConstantPosition(receiver,90.0,30.0);
 
-    anim.UpdateNodeDescription(sender,"TCP Sender");
-    anim.UpdateNodeDescription(vbrSender,"VBR Sender");
-    anim.UpdateNodeDescription(router,"ECN Router");
-    anim.UpdateNodeDescription(receiver,"TCP Receiver");
+    anim.SetConstantPosition(
+        sender,
+        10.0,
+        40.0);
+
+    anim.SetConstantPosition(
+        vbrSender,
+        10.0,
+        20.0);
+
+    anim.SetConstantPosition(
+        router,
+        50.0,
+        30.0);
+
+    anim.SetConstantPosition(
+        receiver,
+        90.0,
+        30.0);
+
+    anim.UpdateNodeDescription(
+        sender,
+        "TCP Sender");
+
+    anim.UpdateNodeDescription(
+        vbrSender,
+        "VBR Sender");
+
+    anim.UpdateNodeDescription(
+        router,
+        "ECN Router");
+
+    anim.UpdateNodeDescription(
+        receiver,
+        "TCP Receiver");
+
+    // ============================================================
+    // FLOW MONITOR
+    // ============================================================
 
     FlowMonitorHelper flowHelper;
-    Ptr<FlowMonitor> flowMonitor=flowHelper.InstallAll();
+
+    Ptr<FlowMonitor> flowMonitor =
+        flowHelper.InstallAll();
+
+    // ============================================================
+    // SIMULATION INFORMATION
+    // ============================================================
 
     std::cout
         << "\n"
@@ -180,98 +374,294 @@ int main(int argc,char* argv[])
         << "Final CWND = min(Formula CWND, BDP)\n"
         << "==================================================\n";
 
-    Simulator::Stop(Seconds(simulationTime));
+    // ============================================================
+    // RUN SIMULATION
+    // ============================================================
+
+    Simulator::Stop(
+        Seconds(simulationTime));
+
     Simulator::Run();
+
+    // ============================================================
+    // FINAL FLOW STATISTICS
+    // ============================================================
 
     flowMonitor->CheckForLostPackets();
 
-    Ptr<Ipv4FlowClassifier> classifier=DynamicCast<Ipv4FlowClassifier>(flowHelper.GetClassifier());
-    std::map<FlowId,FlowMonitor::FlowStats> stats=flowMonitor->GetFlowStats();
+    Ptr<Ipv4FlowClassifier> classifier =
+        DynamicCast<Ipv4FlowClassifier>(
+            flowHelper.GetClassifier());
 
-    const double finalEcnRatio=EcnMonitor::GetRatio();
-    const double finalEcnPercentage=finalEcnRatio*100.0;
+    std::map<FlowId, FlowMonitor::FlowStats> stats =
+        flowMonitor->GetFlowStats();
+
+    // IMPORTANT:
+    // GetRatio() is the interval ratio used by the controller.
+    // GetCumulativeRatio() is the complete simulation ratio.
+    const double finalEcnRatio =
+        EcnMonitor::GetCumulativeRatio();
+
+    const double finalEcnPercentage =
+        finalEcnRatio * 100.0;
 
     std::cout
         << "\n"
         << "==================================================\n"
         << "                 FINAL RESULTS\n"
         << "==================================================\n"
-        << "Total Packets      : " << EcnMonitor::GetTotalPackets() << "\n"
-        << "ECN Marked Packets : " << EcnMonitor::GetMarkedPackets() << "\n"
-        << "ECN Ratio          : " << std::fixed << std::setprecision(8) << finalEcnRatio << "\n"
-        << "ECN Percentage     : " << std::setprecision(4) << finalEcnPercentage << " %\n"
-        << "ECN ACK Count      : " << EcnMonitor::GetEcnAckCount() << "\n"
-        << "Last ECN ACK Time  : " << EcnMonitor::GetLastEcnAckTime() << " s\n"
-        << "Last RTT           : " << BdpMonitor::GetRttSeconds() << " s\n"
-        << "BDP Bytes          : " << BdpMonitor::GetBdpBytes() << "\n"
-        << "BDP Packets        : " << BdpMonitor::GetBdpPackets() << "\n"
-        << "Controller Updates : " << EcnController::GetControllerUpdates() << "\n"
-        << "Last Old CWND      : " << EcnController::GetLastOldCwnd() << " bytes\n"
-        << "Last Formula CWND  : " << EcnController::GetLastFormulaCwnd() << " bytes\n"
-        << "Last Final CWND    : " << EcnController::GetLastFinalCwnd() << " bytes\n"
+        << "Total Packets      : "
+        << EcnMonitor::GetTotalPackets()
+        << "\n"
+
+        << "ECN Marked Packets : "
+        << EcnMonitor::GetMarkedPackets()
+        << "\n"
+
+        << "ECN Ratio          : "
+        << std::fixed
+        << std::setprecision(8)
+        << finalEcnRatio
+        << "\n"
+
+        << "ECN Percentage     : "
+        << std::setprecision(4)
+        << finalEcnPercentage
+        << " %\n"
+
+        << "ECN ACK Count      : "
+        << EcnMonitor::GetEcnAckCount()
+        << "\n"
+
+        << "Last ECN ACK Time  : "
+        << EcnMonitor::GetLastEcnAckTime()
+        << " s\n"
+
+        << "Last RTT           : "
+        << BdpMonitor::GetRttSeconds()
+        << " s\n"
+
+        << "BDP Bytes          : "
+        << BdpMonitor::GetBdpBytes()
+        << "\n"
+
+        << "BDP Packets        : "
+        << BdpMonitor::GetBdpPackets()
+        << "\n"
+
+        << "Controller Updates : "
+        << EcnController::GetControllerUpdates()
+        << "\n"
+
+        << "Last Old CWND      : "
+        << EcnController::GetLastOldCwnd()
+        << " bytes\n"
+
+        << "Last Formula CWND  : "
+        << EcnController::GetLastFormulaCwnd()
+        << " bytes\n"
+
+        << "Last Final CWND    : "
+        << EcnController::GetLastFinalCwnd()
+        << " bytes\n"
+
         << "==================================================\n";
+
+    // ============================================================
+    // CSV OUTPUT
+    // ============================================================
 
     std::ofstream csv("ecn-v2-results.csv");
 
-    csv << "FlowId,Source,Destination,TxPackets,RxPackets,LostPackets,PacketLossPercent,TxBytes,RxBytes,ThroughputMbps,MeanDelayMs,MeanJitterMs,TotalPackets,ECNMarkedPackets,ECNRatio,ECNPercentage,ECNAckCount,LastECNAckTime,RTTSeconds,BDPBytes,BDPPackets,Alpha,OldCWND,FormulaCWND,FinalCWND\n";
+    csv
+        << "FlowId,Source,Destination,"
+        << "TxPackets,RxPackets,LostPackets,"
+        << "PacketLossPercent,TxBytes,RxBytes,"
+        << "ThroughputMbps,MeanDelayMs,MeanJitterMs,"
+        << "TotalPackets,ECNMarkedPackets,ECNRatio,"
+        << "ECNPercentage,ECNAckCount,LastECNAckTime,"
+        << "RTTSeconds,BDPBytes,BDPPackets,Alpha,"
+        << "OldCWND,FormulaCWND,FinalCWND\n";
 
     for (const auto& entry : stats)
     {
-        const FlowId flowId=entry.first;
-        const FlowMonitor::FlowStats& flowStats=entry.second;
-        Ipv4FlowClassifier::FiveTuple tuple=classifier->FindFlow(flowId);
+        const FlowId flowId = entry.first;
 
-        double duration=0.0;
+        const FlowMonitor::FlowStats& flowStats =
+            entry.second;
+
+        Ipv4FlowClassifier::FiveTuple tuple =
+            classifier->FindFlow(flowId);
+
+        double duration = 0.0;
+
         if (flowStats.rxPackets > 0)
         {
-            duration=flowStats.timeLastRxPacket.GetSeconds()-flowStats.timeFirstTxPacket.GetSeconds();
+            duration =
+                flowStats.timeLastRxPacket.GetSeconds() -
+                flowStats.timeFirstTxPacket.GetSeconds();
         }
 
-        double throughput=0.0;
+        double throughput = 0.0;
+
         if (duration > 0.0)
         {
-            throughput=static_cast<double>(flowStats.rxBytes)*8.0/duration/1000000.0;
+            throughput =
+                static_cast<double>(flowStats.rxBytes) *
+                8.0 /
+                duration /
+                1000000.0;
         }
 
-        double packetLoss=0.0;
+        double packetLoss = 0.0;
+
         if (flowStats.txPackets > 0)
         {
-            packetLoss=static_cast<double>(flowStats.lostPackets)/static_cast<double>(flowStats.txPackets)*100.0;
+            packetLoss =
+                static_cast<double>(flowStats.lostPackets) /
+                static_cast<double>(flowStats.txPackets) *
+                100.0;
         }
 
-        double meanDelay=0.0;
+        double meanDelay = 0.0;
+
         if (flowStats.rxPackets > 0)
         {
-            meanDelay=flowStats.delaySum.GetSeconds()/flowStats.rxPackets*1000.0;
+            meanDelay =
+                flowStats.delaySum.GetSeconds() /
+                flowStats.rxPackets *
+                1000.0;
         }
 
-        double meanJitter=0.0;
+        double meanJitter = 0.0;
+
         if (flowStats.rxPackets > 1)
         {
-            meanJitter=flowStats.jitterSum.GetSeconds()/(flowStats.rxPackets-1)*1000.0;
+            meanJitter =
+                flowStats.jitterSum.GetSeconds() /
+                (flowStats.rxPackets - 1) *
+                1000.0;
         }
 
         std::cout
-            << "\n---------------- FLOW " << flowId << " ----------------\n"
-            << "Source              : " << tuple.sourceAddress << "\n"
-            << "Destination         : " << tuple.destinationAddress << "\n"
-            << "Protocol            : " << static_cast<uint32_t>(tuple.protocol) << "\n"
-            << "TX Packets          : " << flowStats.txPackets << "\n"
-            << "RX Packets          : " << flowStats.rxPackets << "\n"
-            << "Lost Packets        : " << flowStats.lostPackets << "\n"
-            << "Packet Loss         : " << packetLoss << " %\n"
-            << "TX Bytes            : " << flowStats.txBytes << "\n"
-            << "RX Bytes            : " << flowStats.rxBytes << "\n"
-            << "Throughput          : " << throughput << " Mbps\n"
-            << "Mean Delay          : " << meanDelay << " ms\n"
-            << "Mean Jitter         : " << meanJitter << " ms\n"
+            << "\n---------------- FLOW "
+            << flowId
+            << " ----------------\n"
+
+            << "Source              : "
+            << tuple.sourceAddress
+            << "\n"
+
+            << "Destination         : "
+            << tuple.destinationAddress
+            << "\n"
+
+            << "Protocol            : "
+            << static_cast<uint32_t>(tuple.protocol)
+            << "\n"
+
+            << "TX Packets          : "
+            << flowStats.txPackets
+            << "\n"
+
+            << "RX Packets          : "
+            << flowStats.rxPackets
+            << "\n"
+
+            << "Lost Packets        : "
+            << flowStats.lostPackets
+            << "\n"
+
+            << "Packet Loss         : "
+            << packetLoss
+            << " %\n"
+
+            << "TX Bytes            : "
+            << flowStats.txBytes
+            << "\n"
+
+            << "RX Bytes            : "
+            << flowStats.rxBytes
+            << "\n"
+
+            << "Throughput          : "
+            << throughput
+            << " Mbps\n"
+
+            << "Mean Delay          : "
+            << meanDelay
+            << " ms\n"
+
+            << "Mean Jitter         : "
+            << meanJitter
+            << " ms\n"
+
             << "------------------------------------------\n";
 
-        csv << flowId << "," << tuple.sourceAddress << "," << tuple.destinationAddress << "," << flowStats.txPackets << "," << flowStats.rxPackets << "," << flowStats.lostPackets << "," << packetLoss << "," << flowStats.txBytes << "," << flowStats.rxBytes << "," << throughput << "," << meanDelay << "," << meanJitter << "," << EcnMonitor::GetTotalPackets() << "," << EcnMonitor::GetMarkedPackets() << "," << finalEcnRatio << "," << finalEcnPercentage << "," << EcnMonitor::GetEcnAckCount() << "," << EcnMonitor::GetLastEcnAckTime() << "," << BdpMonitor::GetRttSeconds() << "," << BdpMonitor::GetBdpBytes() << "," << BdpMonitor::GetBdpPackets() << "," << alpha << "," << EcnController::GetLastOldCwnd() << "," << EcnController::GetLastFormulaCwnd() << "," << EcnController::GetLastFinalCwnd() << "\n";
+        csv
+            << flowId
+            << ","
+            << tuple.sourceAddress
+            << ","
+            << tuple.destinationAddress
+            << ","
+            << flowStats.txPackets
+            << ","
+            << flowStats.rxPackets
+            << ","
+            << flowStats.lostPackets
+            << ","
+            << packetLoss
+            << ","
+            << flowStats.txBytes
+            << ","
+            << flowStats.rxBytes
+            << ","
+            << throughput
+            << ","
+            << meanDelay
+            << ","
+            << meanJitter
+            << ","
+            << EcnMonitor::GetTotalPackets()
+            << ","
+            << EcnMonitor::GetMarkedPackets()
+            << ","
+            << finalEcnRatio
+            << ","
+            << finalEcnPercentage
+            << ","
+            << EcnMonitor::GetEcnAckCount()
+            << ","
+            << EcnMonitor::GetLastEcnAckTime()
+            << ","
+            << BdpMonitor::GetRttSeconds()
+            << ","
+            << BdpMonitor::GetBdpBytes()
+            << ","
+            << BdpMonitor::GetBdpPackets()
+            << ","
+            << alpha
+            << ","
+            << EcnController::GetLastOldCwnd()
+            << ","
+            << EcnController::GetLastFormulaCwnd()
+            << ","
+            << EcnController::GetLastFinalCwnd()
+            << "\n";
     }
 
     csv.close();
-    flowMonitor->SerializeToXmlFile("ecn-v2-flowmon.xml",true,true);
+
+    // ============================================================
+    // OUTPUT FILES
+    // ============================================================
+
+    flowMonitor->SerializeToXmlFile(
+        "ecn-v2-flowmon.xml",
+        true,
+        true);
+
     Simulator::Destroy();
 
     std::cout

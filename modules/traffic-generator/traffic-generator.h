@@ -25,6 +25,7 @@ class TrafficGenerator
         uint32_t packetSize,
         double startTime,
         double stopTime);
+    static ns3::ApplicationContainer InstallUdpReceiver(ns3::Ptr<ns3::Node> receiver, uint16_t port, double startTime, double stopTime);
 };
 
 } // namespace ecn

@@ -2,24 +2,27 @@
 #define ECN_CONTROLLER_H
 
 #include "ns3/tcp-congestion-ops.h"
-#include "ns3/tcp-socket-base.h"
+#include "ns3/tcp-rate-ops.h"
+#include "ns3/tcp-socket-state.h"
+#include "ns3/core-module.h"
 
-namespace ns3
-{
+#include <cstdint>
+#include <string>
+
 namespace ecn
 {
 
-class EcnController : public TcpNewReno
+class EcnController : public ns3::TcpNewReno
 {
 public:
-    static TypeId GetTypeId();
+    static ns3::TypeId GetTypeId();
 
     EcnController();
     EcnController(const EcnController& other);
     ~EcnController() override;
 
     std::string GetName() const override;
-    Ptr<TcpCongestionOps> Fork() override;
+    ns3::Ptr<ns3::TcpCongestionOps> Fork() override;
 
     static void SetAlpha(double alpha);
     static double GetAlpha();
@@ -30,21 +33,40 @@ public:
     static uint32_t GetLastFinalCwnd();
     static uint32_t GetControllerUpdates();
 
-    void PktsAcked(Ptr<TcpSocketState> tcb,uint32_t segmentsAcked,const Time& rtt) override;
-    uint32_t GetSsThresh(Ptr<const TcpSocketState> tcb,uint32_t bytesInFlight) override;
-    void IncreaseWindow(Ptr<TcpSocketState> tcb,uint32_t segmentsAcked) override;
-    void CwndEvent(Ptr<TcpSocketState> tcb,const TcpSocketState::TcpCAEvent_t event) override;
+    bool HasCongControl() const override;
+
+    void CongControl(
+        ns3::Ptr<ns3::TcpSocketState> tcb,
+        const ns3::TcpRateOps::TcpRateConnection& rc,
+        const ns3::TcpRateOps::TcpRateSample& rs) override;
+
+    void PktsAcked(
+        ns3::Ptr<ns3::TcpSocketState> tcb,
+        uint32_t segmentsAcked,
+        const ns3::Time& rtt) override;
+
+    uint32_t GetSsThresh(
+        ns3::Ptr<const ns3::TcpSocketState> tcb,
+        uint32_t bytesInFlight) override;
+
+    void IncreaseWindow(
+        ns3::Ptr<ns3::TcpSocketState> tcb,
+        uint32_t segmentsAcked) override;
+
+    void CwndEvent(
+        ns3::Ptr<ns3::TcpSocketState> tcb,
+        const ns3::TcpSocketState::TcpCAEvent_t event) override;
 
 private:
     static double g_alpha;
     static uint64_t g_bottleneckBps;
+
     static uint32_t g_lastOldCwnd;
     static uint32_t g_lastFormulaCwnd;
     static uint32_t g_lastFinalCwnd;
     static uint32_t g_controllerUpdates;
 };
 
-} // namespace ecn
-} // namespace ns3
+}
 
-#endif // ECN_CONTROLLER_H
+#endif
