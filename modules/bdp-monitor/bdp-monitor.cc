@@ -1,5 +1,4 @@
 #include "bdp-monitor.h"
-
 #include <unordered_map>
 
 using namespace ns3;
@@ -7,10 +6,8 @@ using namespace std;
 
 namespace ecn
 {
-
 namespace
 {
-
 struct BdpData
 {
     double rttSeconds = 0.0;
@@ -19,7 +16,6 @@ struct BdpData
 };
 
 unordered_map<const TcpSocketState*, BdpData> g_bdpData;
-
 }
 
 void BdpMonitor::Reset(Ptr<const TcpSocketState> tcb)
@@ -38,13 +34,9 @@ void BdpMonitor::Update(Ptr<const TcpSocketState> tcb, double rttSeconds, uint32
     }
 
     BdpData& data = g_bdpData[PeekPointer(tcb)];
-
     data.rttSeconds = rttSeconds;
-
     double bdpBits = static_cast<double>(bottleneckBps) * rttSeconds;
-
     data.bdpBytes = static_cast<uint64_t>(bdpBits / 8.0);
-
     data.bdpPackets = data.bdpBytes / segmentSize;
 }
 
@@ -98,5 +90,4 @@ uint64_t BdpMonitor::GetBdpPackets(Ptr<const TcpSocketState> tcb)
 
     return it->second.bdpPackets;
 }
-
 }

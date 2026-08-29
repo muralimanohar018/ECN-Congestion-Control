@@ -1,11 +1,8 @@
 #include "ecn-controller.h"
-
 #include "../bdp-controller/bdp-controller.h"
 #include "../bdp-monitor/bdp-monitor.h"
 #include "../ecn-monitor/ecn-monitor.h"
-
 #include "ns3/core-module.h"
-
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
@@ -15,7 +12,6 @@ using namespace std;
 
 namespace ecn
 {
-
 double EcnController::g_alpha = 1.0;
 uint64_t EcnController::g_bottleneckBps = 50000000;
 uint32_t EcnController::g_lastOldCwnd = 0;
@@ -156,7 +152,6 @@ void EcnController::CongControl(Ptr<TcpSocketState> tcb, const TcpRateOps::TcpRa
     g_lastProcessedEcnMarks = markedPackets;
 
     uint32_t bdpBytes = static_cast<uint32_t>(min<uint64_t>(bdpBytes64, UINT32_MAX));
-
     uint32_t oldCwnd = tcb->m_cWnd.Get();
 
     if (oldCwnd < segmentSize)
@@ -170,7 +165,6 @@ void EcnController::CongControl(Ptr<TcpSocketState> tcb, const TcpRateOps::TcpRa
     }
 
     double ecnRatio = static_cast<double>(markedPackets) / static_cast<double>(totalPackets);
-
     double reductionFactor = 1.0 - (g_alpha * ecnRatio);
 
     if (reductionFactor < 0.0)
@@ -193,11 +187,9 @@ void EcnController::CongControl(Ptr<TcpSocketState> tcb, const TcpRateOps::TcpRa
     }
 
     tcb->m_cWnd = finalCwnd;
-
     g_lastOldCwnd = oldCwnd;
     g_lastFormulaCwnd = formulaCwnd;
     g_lastFinalCwnd = finalCwnd;
-
     ++g_controllerUpdates;
 
     EcnMonitor::RecordEcnAck(Simulator::Now().GetSeconds());
