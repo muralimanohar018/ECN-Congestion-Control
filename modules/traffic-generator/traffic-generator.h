@@ -13,9 +13,7 @@ class TrafficGenerator
 {
 public:
     static ns3::ApplicationContainer InstallReceiver(ns3::Ptr<ns3::Node> receiver, uint16_t port, double stopTime);
-
     static ns3::ApplicationContainer InstallUdpReceiver(ns3::Ptr<ns3::Node> receiver, uint16_t port, double startTime, double stopTime);
-
     static ns3::ApplicationContainer InstallSender(ns3::Ptr<ns3::Node> sender, const ns3::Address& destination, uint16_t port, uint64_t totalBytes, uint32_t packetSize, double startTime, double stopTime);
 };
 

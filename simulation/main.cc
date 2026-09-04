@@ -1,3 +1,4 @@
+
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/flow-monitor-module.h"
@@ -6,22 +7,21 @@
 #include "ns3/point-to-point-module.h"
 #include "ns3/red-queue-disc.h"
 #include "ns3/traffic-control-module.h"
-
 #include "bdp-monitor.h"
 #include "ecn-controller.h"
 #include "ecn-monitor.h"
 #include "traffic-generator.h"
 #include "vbr-generator.h"
-
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <string>
-
 using namespace ns3;
 using namespace ecn;
 using namespace std;
+
+static ofstream g_cwndFiles[3];
 
 static void QueueEnqueueTrace(Ptr<const QueueDiscItem> item)
 {
@@ -33,11 +33,36 @@ static void QueueMarkTrace(Ptr<const QueueDiscItem> item, const char* reason)
     EcnMonitor::OnMark(item, reason);
 }
 
+static void CwndTrace(uint32_t flowId, uint32_t oldCwnd, uint32_t newCwnd)
+{
+    if (flowId < 1 || flowId > 3)
+    {
+        return;
+    }
+    ofstream& file = g_cwndFiles[flowId - 1];
+    if (!file.is_open())
+    {
+        return;
+    }
+    file << fixed << setprecision(8) << Simulator::Now().GetSeconds() << "," << oldCwnd << "," << newCwnd << "\n";
+    file.flush();
+}
+
+static void ConnectCwndTraces()
+{
+    bool flow1 = Config::ConnectWithoutContextFailSafe("/NodeList/0/$ns3::TcpL4Protocol/SocketList/*/CongestionWindow", MakeBoundCallback(&CwndTrace, 1));
+    bool flow2 = Config::ConnectWithoutContextFailSafe("/NodeList/1/$ns3::TcpL4Protocol/SocketList/*/CongestionWindow", MakeBoundCallback(&CwndTrace, 2));
+    bool flow3 = Config::ConnectWithoutContextFailSafe("/NodeList/2/$ns3::TcpL4Protocol/SocketList/*/CongestionWindow", MakeBoundCallback(&CwndTrace, 3));
+    cout << "[V3] TCP Flow 1 CWND Trace: " << (flow1 ? "CONNECTED" : "FAILED") << "\n";
+    cout << "[V3] TCP Flow 2 CWND Trace: " << (flow2 ? "CONNECTED" : "FAILED") << "\n";
+    cout << "[V3] TCP Flow 3 CWND Trace: " << (flow3 ? "CONNECTED" : "FAILED") << "\n";
+}
+
 int main(int argc, char* argv[])
 {
     uint64_t packetCount = 100000;
     double simulationTime = 30.0;
-    double alpha = 1.0;
+    double alpha = 2.5;
     uint32_t packetSize = 1000;
     string tcpLinkRate = "1Gbps";
     string vbrLinkRate = "100Mbps";
@@ -47,9 +72,9 @@ int main(int argc, char* argv[])
     string bottleneckDelay = "50ms";
     string receiverLinkRate = "100Mbps";
     string receiverLinkDelay = "5ms";
-    uint32_t redMinTh = 100;
-    uint32_t redMaxTh = 200;
-    uint32_t queueSize = 300;
+    uint32_t redMinTh = 1;
+    uint32_t redMaxTh = 3;
+    uint32_t queueSize = 10;
     uint32_t vbrMinRate = 5;
     uint32_t vbrMaxRate = 30;
 
@@ -141,6 +166,7 @@ int main(int argc, char* argv[])
     QueueDiscContainer queueDiscs = red.Install(routerBottleneck);
 
     Ipv4AddressHelper address;
+
     address.SetBase("10.0.1.0", "255.255.255.0");
     Ipv4InterfaceContainer tcp1If = address.Assign(tcp1Router);
 
@@ -171,8 +197,8 @@ int main(int argc, char* argv[])
         queue->TraceConnectWithoutContext("Mark", MakeCallback(&QueueMarkTrace));
     }
 
-    cout << "[V2] Queue Enqueue Trace: CONNECTED\n";
-    cout << "[V2] Queue Mark Trace: CONNECTED\n";
+    cout << "[V3] Queue Enqueue Trace: CONNECTED\n";
+    cout << "[V3] Queue Mark Trace: CONNECTED\n";
 
     uint16_t tcpPort1 = 5001;
     uint16_t tcpPort2 = 5002;
@@ -183,7 +209,6 @@ int main(int argc, char* argv[])
     TrafficGenerator::InstallReceiver(receiver1, tcpPort1, simulationTime);
     TrafficGenerator::InstallReceiver(receiver1, tcpPort2, simulationTime);
     TrafficGenerator::InstallReceiver(receiver2, tcpPort3, simulationTime);
-
     TrafficGenerator::InstallUdpReceiver(receiver1, vbrPort1, 1.0, simulationTime);
     TrafficGenerator::InstallUdpReceiver(receiver2, vbrPort2, 1.0, simulationTime);
 
@@ -200,14 +225,40 @@ int main(int argc, char* argv[])
 
     VbrGenerator::InstallBoth(vbr, vbrDestination1, vbrDestination2, packetSize, 1.0, simulationTime);
 
+    /*
+     * Open CWND output files before simulation starts.
+     */
+    g_cwndFiles[0].open("v3-flow1-cwnd.csv", ios::out | ios::trunc);
+    g_cwndFiles[1].open("v3-flow2-cwnd.csv", ios::out | ios::trunc);
+    g_cwndFiles[2].open("v3-flow3-cwnd.csv", ios::out | ios::trunc);
+
+    cout << "[V3] CWND File 1: " << (g_cwndFiles[0].is_open() ? "OPENED" : "FAILED") << "\n";
+    cout << "[V3] CWND File 2: " << (g_cwndFiles[1].is_open() ? "OPENED" : "FAILED") << "\n";
+    cout << "[V3] CWND File 3: " << (g_cwndFiles[2].is_open() ? "OPENED" : "FAILED") << "\n";
+
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        if (g_cwndFiles[i].is_open())
+        {
+            g_cwndFiles[i] << "Time,CwndOldBytes,CwndNewBytes\n";
+        }
+    }
+
+    /*
+     * TCP BulkSend applications start at 1.0 seconds.
+     * Connect to their CWND trace sources shortly after
+     * the applications have created their TCP sockets.
+     */
+    Simulator::Schedule(Seconds(1.001), &ConnectCwndTraces);
+
     FlowMonitorHelper flowmonHelper;
     Ptr<FlowMonitor> flowmon = flowmonHelper.InstallAll();
 
     cout << "\n";
     cout << "==================================================\n";
-    cout << "       INTELLIGENT ECN CONGESTION CONTROLLER V2\n";
+    cout << "       INTELLIGENT ECN CONGESTION CONTROLLER V3\n";
     cout << "==================================================\n";
-    cout << "Topology           : " << "3 TCP + 2 VBR -> Router -> " << "50 Mbps Bottleneck -> 2 Receivers\n";
+    cout << "Topology           : 3 TCP + 2 VBR -> Router -> 50 Mbps Bottleneck -> 2 Receivers\n";
     cout << "TCP Flows          : 3\n";
     cout << "VBR Flows          : 2\n";
     cout << "Controller         : ECN + BDP\n";
@@ -228,7 +279,7 @@ int main(int argc, char* argv[])
     cout << "Simulation Time    : " << simulationTime << " seconds\n";
     cout << "==================================================\n";
     cout << "CWND Formula:\n";
-    cout << "CWND_new = min(BDP, " << "CWND_old * (1 - Alpha * ECN_Ratio))\n";
+    cout << "CWND_new = min(BDP, CWND_old * (1 - Alpha * ECN_Ratio))\n";
     cout << "BDP Formula:\n";
     cout << "BDP = Bottleneck Bandwidth * RTT\n";
     cout << "==================================================\n";
@@ -243,11 +294,11 @@ int main(int argc, char* argv[])
     map<FlowId, FlowMonitor::FlowStats> stats = flowmon->GetFlowStats();
 
     ofstream csv("ecn-v2-results.csv");
-    csv << "FlowId,Source,Destination,Protocol," << "TxPackets,RxPackets,LostPackets," << "PacketLossPercent,TxBytes,RxBytes," << "ThroughputMbps,MeanDelayMs,MeanJitterMs\n";
+    csv << "FlowId,Source,Destination,Protocol,TxPackets,RxPackets,LostPackets,PacketLossPercent,TxBytes,RxBytes,ThroughputMbps,MeanDelayMs,MeanJitterMs\n";
 
     ofstream txt("ecn-v2-results.txt");
     txt << "==================================================\n";
-    txt << "       INTELLIGENT ECN CONGESTION CONTROLLER V2\n";
+    txt << "       INTELLIGENT ECN CONGESTION CONTROLLER V3\n";
     txt << "==================================================\n";
     txt << "Bottleneck Rate    : " << bottleneckRate << "\n";
     txt << "RED MinTh          : " << redMinTh << " packets\n";
@@ -364,6 +415,9 @@ int main(int argc, char* argv[])
     cout << "  ecn-v2-results.csv\n";
     cout << "  ecn-v2-results.txt\n";
     cout << "  ecn-v2-flowmon.xml\n";
+    cout << "  v3-flow1-cwnd.csv\n";
+    cout << "  v3-flow2-cwnd.csv\n";
+    cout << "  v3-flow3-cwnd.csv\n";
     cout << "==================================================\n";
 
     txt << "\n";
@@ -384,7 +438,17 @@ int main(int argc, char* argv[])
 
     csv.close();
     txt.close();
-    Simulator::Destroy();
 
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        if (g_cwndFiles[i].is_open())
+        {
+            g_cwndFiles[i].flush();
+            g_cwndFiles[i].close();
+        }
+    }
+
+    Simulator::Destroy();
     return 0;
 }
+

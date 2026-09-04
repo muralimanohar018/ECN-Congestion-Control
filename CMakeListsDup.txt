@@ -1,0 +1,18 @@
+set(TCP_BASELINE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/simulation/tcp-baseline.cc
+)
+
+build_exec(
+    EXECNAME tcp-baseline
+    SOURCE_FILES ${TCP_BASELINE_SOURCES}
+    LIBRARIES_TO_LINK
+        ${libcore}
+        ${libnetwork}
+        ${libinternet}
+        ${libapplications}
+        ${libpoint-to-point}
+        ${libtraffic-control}
+        ${libflow-monitor}
+    EXECUTABLE_DIRECTORY_PATH
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/scratch/ECN-Conjestion-Control_FINAL/
+)
